@@ -1,0 +1,208 @@
+---
+title: "Model interpretation"
+author: "Bodo Winter"
+date: "7/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Intro
+
+Load packages:
+
+```{r, message = FALSE}
+library(tidyverse)
+library(gridExtra)
+library(brms)
+```
+
+## Model selection stage
+
+Check the outcome of 10-fold cross-validation comparisons between models:
+
+```{r}
+# Main model:
+
+load('../models/kfold_main.RData')
+
+# Models without interactions:
+
+load('../models/kfold_no_mod_int.RData')
+load('../models/kfold_no_triplet_int.RData')
+load('../models/kfold_no_int.RData')
+
+# Models without main effects:
+
+load('../models/kfold_no_triplet.RData')
+load('../models/kfold_no_mod.RData')
+load('../models/kfold_no_cond.RData')
+```
+
+Check:
+
+```{r}
+kfold_main
+kfold_no_mod_int
+kfold_no_triplet_int
+```
+
+Compare:
+
+```{r}
+compare_ic(kfold_main, kfold_no_mod_int)
+compare_ic(kfold_main, kfold_no_triplet_int)
+```
+
+The values indicate that there's no reliable difference in predicting unseen data between the full model (with modality \* condition interaction) and the model without this interaction. This suggests that the modality \* condition interaction does not play a huge role.
+
+Since this interaction plays little role and makes the overall model interpretation much harder, it will be excluded in all future comparison. That is, we take the model with the condition \* triplet interaction but **without** the modality * condition interaction as baseline.
+
+Check k-fold comparisons for the other effects:
+
+```{r}
+compare_ic(kfold_no_int, kfold_no_mod)
+compare_ic(kfold_no_int, kfold_no_cond)
+compare_ic(kfold_no_int, kfold_no_triplet)
+```
+
+There does not seem to be evidence for a reliable modality effect.
+
+Load main model:
+
+```{r}
+load('../models/mdl_no_mod_int.RData')
+
+# Rename for simplicity:
+
+xmdl <- mdl_no_mod_int
+```
+
+## Check the R-squared of the model:
+
+Check:
+
+```{r}
+bayes_R2(xmdl)
+```
+
+## Print the chosen model:
+
+Check the model:
+
+```{r}
+summary(xmdl)
+```
+
+First, it needs to be pointed out that the model seems to have converged properly (all Rhat values exactly 1.00).
+
+Notice a few things:
+
+* the intercept is the control condition for the oral response modality
+
+* the CI for the triplet_fac3 coefficient is above 0, indicating that even for the control condition, the third position is more accurate; this seems to suggest that people chunk anyway
+
+* compared to control, intonation A and intonation B both lead to an increase in accuracy (remember that the reference level is "oral" here, so this is the simple effect for "oral" only)
+
+* the "pause" condition also leads to an increase against "control", but not by as much
+
+* there are interactions between both penultimate and ultimate triplet conditions and Intonation A and B, in the predicted direction (intonation = better)
+
+* for the third position within a triplet, there also is a positive pause coefficient, which suggests that people have recency effects within a triplet
+
+However, these are just the coefficients of the model. To better interpret the model, it's best to look at the marginal effects.
+
+## Marginal effects:
+
+Extract marginal effects:
+
+```{r}
+condition <- marginal_effects(xmdl, "Condition")
+modality <- marginal_effects(xmdl, "Modality")
+triplet <- marginal_effects(xmdl, "Triplet")
+condition_modality <- marginal_effects(xmdl,
+                                       "Condition:Modality")
+condition_triplet <- marginal_effects(xmdl,
+                                      "Condition:Triplet")
+```
+
+Plot the overall condition effect (ignoring all other variables).
+
+```{r}
+condition
+```
+
+Overall, it looks like the intonation conditions perform best. Control performs worst. The pause condition is in between, but its 95% credible interval overlaps considerably with the control condition as well as the intonation condition.
+
+```{r}
+modality
+```
+
+People are overall best with the grid, and slightly worse with the key board. People are worst in the oral condition.
+
+```{r}
+triplet
+```
+
+A tendency for people to be better with the third within a triplet. This can be interpreted as a recency effect within a triplet. To some extent this may be because there's three conditions in this experiment that have a triplet-based structure, so taking the marginal over the entire experiment, the third position is going to be particularly easy in the average.
+
+Triplet by condition:
+
+```{r}
+condition_triplet
+```
+
+The third position is really good for intonation A and B, as well as for pause (a bit worse here). The third position is not at all that good within the control condition. However, the fact that it is slightly higher may suggest that people spontaneously chunk in threes, OR it is due to the averaging with the grid condition also being in there (more likely the latter).
+
+## Posterior probabilities of the relevant effects
+
+In this section, we will extract the relevant posterior samples and calculate the posterior probability for the effects we are interested in, e.g., the predicted probability of "oral" being worse than "grid" and "key". Or the posterior probability of intonation "A" being better than "control" etc.
+
+In doing this, we need to pay special attention about the interactions, but we can ignore the non-interacting variables (such as digit span).
+
+First, extract the posterior samples into a data frame:
+
+```{r}
+posts <- posterior_samples(xmdl)
+```
+
+Just to check, these are the first two rows of that part of the data frame with the posteriors that deals with the posteriors for the fixed effect:
+
+```{r}
+select(posts,
+       b_Intercept:`bsp_moTriplet:ConditionPause`) %>% slice(1:2)
+```
+
+Let's extract the relevat columns into nice objects, so that we can perform simple arithmetic:
+
+```{r}
+intercept <- pull(posts, b_Intercept)
+triplet <- pull(posts, bsp_moTriplet)
+mod_grid <- pull(posts, b_Modalitywgrid)
+mod_key <- pull(posts, b_Modalitywkeyb)
+intoA <- pull(posts, b_ConditionIntonationA)
+intoB <- pull(posts, b_ConditionIntonationB)
+pause <- pull(posts, b_ConditionPause)
+triplet_intoA <- pull(posts, `bsp_moTriplet:ConditionIntonationA`)
+triplet_intoB <- pull(posts, `bsp_moTriplet:ConditionIntonationB`)
+triplet_pause <- pull(posts, `bsp_moTriplet:ConditionPause`)
+```
+
+What is the probability of the coefficients being larger than the others?
+
+```{r}
+## Interactions:
+
+sum(triplet_intoA > triplet_intoB) / nrow(posts)
+sum(triplet_intoA > triplet_pause) / nrow(posts)
+sum(triplet_intoB > triplet_pause) / nrow(posts)
+
+# Grid effect:
+
+sum(mod_grid > 0) / nrow(posts)
+sum(mod_key > 0) / nrow(posts)
+```
+
+This completes this analysis.

@@ -1,0 +1,66 @@
+---
+title: "Intonation & Memory: Data preparation"
+author: "Michelina Savino, Martine Grice, Bodo Winter"
+date: "7/16/2018"
+output: html_document
+---
+
+```{r knitr_setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This script uses "recall_cleaned.csv" from the "preprocessing.Rmd" to compute descriptive stats of the data.
+
+## Preprocessing
+
+We begin by loading in the packages and data:
+
+```{r setup, warning = FALSE, message = FALSE}
+# Load packages:
+
+library(tidyverse)
+library(scales)
+
+# Load data:
+
+recall <- read_csv('../data/recall_cleaned.csv')
+```
+
+## Descriptive stats:
+
+What is the average accuracy per condition?
+
+```{r}
+cond_avgs <- recall %>% group_by(Condition) %>% 
+  summarize(ACC = mean(ACC)) %>% 
+  mutate(ACC = round(ACC, 3),
+         percentage = str_c(ACC * 100, '%'))
+cond_avgs
+write_csv(cond_avgs, '../data/condition_averages.csv')
+```
+
+What is the average accuracy per modality?
+
+```{r}
+mod_avgs <- recall %>% group_by(Modality) %>% 
+  summarize(ACC = mean(ACC)) %>% 
+  mutate(ACC = round(ACC, 3),
+         percentage = str_c(ACC * 100, '%'))
+mod_avgs
+write_csv(mod_avgs, '../data/modality_averages.csv')
+```
+
+What is the average accuracy per condition & triplet?:
+
+```{r}
+trip_cond <- recall %>% group_by(Triplet, Condition) %>% 
+  summarize(ACC = mean(ACC)) %>% 
+  mutate(ACC = round(ACC, 3),
+         percentage = str_c(ACC * 100, '%'))
+trip_cond
+write_csv(trip_cond, '../data/triplet_condition_averages.csv')
+```
+
+This completes this script.

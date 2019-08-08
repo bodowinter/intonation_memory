@@ -1,0 +1,152 @@
+---
+title: "Intonation & Memory: Data preparation"
+author: "Michelina Savino, Martine Grice, Bodo Winter"
+date: "7/16/2018"
+output: html_document
+---
+
+```{r knitr_setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This experiments investigates the effects of pauses and intonation in serial recall. Lists of 9 digits were presented in four conditions (within-subjects):
+
+- C: control condition, which has monotone intonation and no pauses
+- P: pause condition, which has monotone intonation with pauses
+- A: intonation contour A, with non-final intonation boundaries on the 3rd and 6th digit
+- B: intonation contour B, which is the same as A with additional penultimate pitch excursion on the penultimate position of each triplet (positions 2, 5 and 8)
+
+In addition, there were three modality conditions, which refer to how participants performed the recall.
+
+- oral recall
+- written recall, keyboard
+- written recall, grid with tripartite structure
+
+This script gets the data in shape for the other scripts.
+
+## Preprocessing
+
+We begin by loading in the packages and data:
+
+```{r setup, warning = FALSE, message = FALSE}
+# Load packages:
+
+library(tidyverse)
+library(scales)
+
+# Load data:
+
+oral <- read_csv('../data/oral.csv')
+grid <- read_csv('../data/grid.csv')
+kboard <- read_csv('../data/keyboard.csv')
+
+# Display one of them to show general structure:
+
+head(oral)
+
+```
+
+This data is in wide format. The conditions are "C", "P", "A", and "B". Let's change the column names that have spaces and/or special characters in them to simpler column names:
+
+```{r renaming, warning = FALSE}
+oral <- rename(oral,
+               Ppt = `PART#`,
+               Age = `Age (yy)`,
+               DigitSpan = `Digit span`,
+               Modality = Rec_mod)
+grid <- rename(grid,
+               Ppt = `PART#`,
+               Age = `Age (yy)`,
+               DigitSpan = `Digit span`,
+               Modality = Rec_mod)
+kboard <- rename(kboard,
+               Ppt = `PART#`,
+               Age = `Age (yy)`,
+               DigitSpan = `Digit span`,
+               Modality = Rec_mod)
+```
+
+Let's now merge the three files into one:
+
+```{r merging, warning = FALSE}
+recall <- bind_rows(oral, grid, kboard)
+```
+
+Finally we can convert from wide to long format. As a result of this, the information C_01, C_02 etc. will be in one column "CondPos". This needs to be separated into the condition information (the letter preceding the "_") and position information (the number following the underscore).
+
+```{r wide_to_long, warning = FALSE}
+recall <- gather(recall,
+                 key = 'CondPos',
+                 value = 'Correct', C_01:P_09) %>% 
+  separate(CondPos, into = c('Condition', 'Position'))
+```
+
+Participants have numerical identifiers that are repeated throughout the different between-subjects experimental conditions. We need to create unique subject identifiers so that we can later adequately deal with any possible violations of the independence assumptions.
+
+```{r unique_IDs, warning = FALSE}
+recall <- unite(recall, ID, Modality, Ppt, remove = FALSE)
+```
+
+We should make position into an integer variable, and we will also create a new column with accuracy data (percent correct).
+
+```{r more_cleaning, warning = FALSE}
+recall <- mutate(recall,
+                 Position = as.numeric(Position),
+                 ACC = Correct / 15)
+```
+
+Finally, let's arrange the data frame by participant and within participant, by condition and position.
+
+```{r sorting, warning = FALSE}
+recall <- arrange(recall,
+                  ID, Condition, Position)
+```
+
+Relabel the Condition column in a more transparent fashion:
+
+```{r}
+mykey <- tibble(Condition = unique(recall$Condition),
+                ConditionNew = c('Intonation A', 'Intonation B', 'Control', 'Pause'))
+recall <- left_join(recall, mykey) %>%
+  select(-Condition) %>%
+  rename(Condition = ConditionNew)
+```
+
+Next, we will create special meanings for the the first, second and third variable for each triplet. Let's code this as a categorical factor with three distinct levels.
+
+```{r special_positions, warning = FALSE}
+recall$Triplet <- as.factor(1:3)
+```
+
+Center relevant variables:
+
+```{r}
+recall <- mutate(recall,
+                 DigitSpan_c = DigitSpan - mean(DigitSpan))
+```
+
+Create a variable for ultimate versus non-ultimate:
+
+```{r}
+recall <- mutate(recall,
+                 Ultimate = ifelse(Position %in% c(3, 6),
+                                   'ultimate', 'not'))
+```
+
+Let's center the position variable and create a quadratic transform of it to capture any quadratic bends (as expected per primacy and recency effects).
+
+```{r create_quadratics, warning = FALSE}
+recall <- mutate(recall,
+                 Pos_c = Position - mean(Position),
+                 Pos_c2 = Pos_c ^ 2)
+```
+
+Write this data:
+
+```{r}
+write_csv(recall, '../data/recall_cleaned.csv')
+```
+
+This completes this script.
